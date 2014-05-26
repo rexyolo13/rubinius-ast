@@ -279,7 +279,7 @@ module CodeTools
 
     class FormalArguments < Node
       attr_accessor :names, :required, :optional, :defaults, :splat,
-                    :post, :kwargs, :kwrest
+                    :post, :keywords, :kwrest
       attr_reader :block_arg, :block_index
 
       def initialize(line, required, optional, splat, post, kwargs, kwrest, block)
@@ -324,6 +324,8 @@ module CodeTools
           splat = nil
         end
 
+        @splat = splat
+
         @post = []
         if post
           post.each do |arg|
@@ -337,13 +339,29 @@ module CodeTools
           end
         end
 
+        if kwargs
+          @keywords = KeywordArguments.new line, kwargs
+          names.concat @keywords.names
+        else
+          @keywords = nil
+        end
+
+        case kwrest
+        when Symbol
+          names << kwrest
+        when true
+          kwrest = :**
+          names << kwrest
+        end
+
+        @kwrest = kwrest
+
         if block
           @block_arg = BlockArgument.new line, block
           names << block
           @block_index = names.length - 1
         end
 
-        @splat = splat
         @names = names
       end
 
@@ -428,6 +446,7 @@ module CodeTools
         end
         g.state.check_for_locals = true
       end
+
       def to_actual(line)
         arguments = ActualArguments.new line
 
@@ -458,9 +477,18 @@ module CodeTools
 
         sexp += @post if @post
 
+        sexp += @keywords.names if @keywords
+
+        if @kwrest == :**
+          sexp << :**
+        elsif @kwrest
+          sexp << :"**#{@kwrest}"
+        end
+
         sexp << :"&#{@block_arg.name}" if @block_arg
 
         sexp << [:block] + @defaults.to_sexp if @defaults
+        sexp << @keywords.to_sexp if @keywords
 
         sexp
       end
@@ -579,6 +607,45 @@ module CodeTools
 
       def to_sexp
         @arguments.map { |x| x.to_sexp }
+      end
+    end
+
+    class KeywordArguments < Node
+      attr_accessor :arguments, :defaults, :names
+
+      def initialize(line, block)
+        @line = line
+        array = block.array
+        @names = array.map { |a| a.name }
+        @defaults = array.reject do |a|
+          a.value.kind_of? SymbolLiteral and a.value.value == :*
+        end
+        @arguments = array
+      end
+
+      def map_arguments(scope)
+        @arguments.each { |var| scope.assign_local_reference var }
+      end
+
+      def bytecode(g)
+        @defaults.each do |arg|
+          done = g.new_label
+
+          g.push_local arg.variable.slot
+          g.push :undef
+          g.send :equal?, 1, false
+          g.git done
+          arg.bytecode(g)
+          g.pop
+
+          done.set!
+        end
+      end
+
+      def to_sexp
+        sexp = [:block]
+        sexp << @names
+        sexp << @defaults.map { |x| x.to_sexp }
       end
     end
 

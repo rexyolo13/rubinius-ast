@@ -277,6 +277,28 @@ module CodeTools
       end
     end
 
+    class Lambda < Node
+      attr_accessor :arguments, :body
+
+      def initialize(line, arguments, body)
+        @line = line
+        @arguments = arguments
+        @body = Iter.new line, arguments, body
+      end
+
+      def bytecode(g)
+        pos(g)
+
+        g.push_rubinius
+        @body.bytecode(g)
+        g.send_with_block :lambda, 0, false
+      end
+
+      def to_sexp
+        [:lambda, @arguments.to_sexp, [:scope, @body.to_sexp]]
+      end
+    end
+
     class FormalArguments < Node
       attr_accessor :names, :required, :optional, :defaults, :splat,
                     :post, :keywords, :kwrest

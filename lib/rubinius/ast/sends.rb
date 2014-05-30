@@ -491,13 +491,18 @@ module CodeTools
 
       def initialize(line, arguments, body)
         @line = line
-        @arguments = IterArguments.new line, arguments
+        @arguments = arguments || IterArguments.new(line, nil)
         @body = body || NilLiteral.new(line)
+
+        if @body.kind_of?(Block) and @body.locals
+          @locals = @body.locals.body.map { |x| x.value }
+        else
+          @locals = nil
+        end
       end
 
-      # 1.8 doesn't support declared Iter locals
       def block_local?(name)
-        false
+        @locals.include?(name) if @locals
       end
 
       def module?
@@ -601,24 +606,6 @@ module CodeTools
 
       def to_sexp
         [sexp_name, @arguments.to_sexp, @body.to_sexp]
-      end
-    end
-
-    class Iter19 < Iter
-      def initialize(line, arguments, body)
-        @line = line
-        @arguments = arguments || IterArguments.new(line, nil)
-        @body = body || NilLiteral.new(line)
-
-        if @body.kind_of?(Block) and @body.locals
-          @locals = @body.locals.body.map { |x| x.value }
-        else
-          @locals = nil
-        end
-      end
-
-      def block_local?(name)
-        @locals.include?(name) if @locals
       end
     end
 

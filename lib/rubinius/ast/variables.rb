@@ -775,6 +775,10 @@ module CodeTools
         @variable.set_bytecode(g)
         g.pop
       end
+
+      def to_sexp
+        [:lasgn, @name]
+      end
     end
 
     class SplatPatternVariable < Node
@@ -803,6 +807,10 @@ module CodeTools
         g.dup
         @variable.set_bytecode(g)
         g.pop
+      end
+
+      def to_sexp
+        [:splat, @name]
       end
     end
 
@@ -850,6 +858,10 @@ module CodeTools
         done.set!
         @variable.set_bytecode(g)
         g.pop
+      end
+
+      def to_sexp
+        [:lasgn, @name]
       end
     end
   end

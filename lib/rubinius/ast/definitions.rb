@@ -295,7 +295,7 @@ module CodeTools
       end
 
       def to_sexp
-        [:lambda, @arguments.to_sexp, [:scope, @body.to_sexp]]
+        [:lambda, @arguments.to_sexp, [:scope, @body.body.to_sexp]]
       end
     end
 
@@ -488,7 +488,15 @@ module CodeTools
       def to_sexp
         sexp = [:args]
 
-        @required.each { |x| sexp << x }
+        @required.each do |a|
+          case a
+          when Symbol
+            sexp << a
+          when Node
+            sexp << a.to_sexp
+          end
+        end
+
         sexp += @defaults.names if @defaults
 
         if @splat == :*
@@ -497,7 +505,16 @@ module CodeTools
           sexp << :"*#{@splat}"
         end
 
-        sexp += @post if @post
+        if @post
+          @post.each do |a|
+            case a
+            when Symbol
+              sexp << a
+            when Node
+              sexp << a.to_sexp
+            end
+          end
+        end
 
         sexp += @keywords.names if @keywords
 
@@ -597,6 +614,10 @@ module CodeTools
             arg.bytecode(g)
           end
         end
+      end
+
+      def to_sexp
+        [:masgn, @arguments.to_sexp]
       end
     end
 

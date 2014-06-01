@@ -605,7 +605,11 @@ module CodeTools
       end
 
       def to_sexp
-        [sexp_name, @arguments.to_sexp, @body.to_sexp]
+        body_sexp = @body.to_sexp
+        if @locals
+          body_sexp[1] = @locals.map { |x| [:lvar, x] }
+        end
+        [sexp_name, @arguments.to_sexp, body_sexp]
       end
     end
 

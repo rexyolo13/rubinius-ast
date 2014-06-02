@@ -563,17 +563,15 @@ module CodeTools
 
         if node.post
           idx = 0
-          post_args = []
           node.post.body.map do |n|
             case n
             when MultipleAssignment
-              post_args << PatternArguments.from_masgn(n)
+              array << PatternArguments.from_masgn(n)
             when LocalVariable
-              post_args << PostPatternVariable.new(n.line, n.name, idx)
+              array << PostPatternVariable.new(n.line, n.name, idx)
             end
             idx += 1
           end
-          array.concat(post_args.reverse)
         end
 
         PatternArguments.new node.line, ArrayLiteral.new(node.line, array)

@@ -551,6 +551,16 @@ module CodeTools
           end
         end
 
+        if node.splat
+          n = node.splat
+          case n
+          when EmptySplat
+            array << SplatPatternVariable.new(n.line, :*)
+          when SplatAssignment, SplatWrapped, SplatArray
+            array << SplatPatternVariable.new(n.value.line, n.value.name)
+          end
+        end
+
         if node.post
           idx = 0
           post_args = []
@@ -564,16 +574,6 @@ module CodeTools
             idx += 1
           end
           array.concat(post_args.reverse)
-        end
-
-        if node.splat
-          n = node.splat
-          case n
-          when EmptySplat
-            array << SplatPatternVariable.new(n.line, :*)
-          when SplatAssignment, SplatWrapped, SplatArray
-            array << SplatPatternVariable.new(n.value.line, n.value.name)
-          end
         end
 
         PatternArguments.new node.line, ArrayLiteral.new(node.line, array)

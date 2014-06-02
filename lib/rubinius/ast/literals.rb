@@ -233,6 +233,22 @@ module CodeTools
       end
     end
 
+    class RationalLiteral < NumberLiteral
+      def bytecode(g)
+        pos(g)
+
+        g.push_literal @value
+      end
+    end
+
+    class ImaginaryLiteral < NumberLiteral
+      def bytecode(g)
+        pos(g)
+
+        g.push_literal @value
+      end
+    end
+
     class Range < Node
       attr_accessor :start, :finish
 

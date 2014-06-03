@@ -743,6 +743,7 @@ module CodeTools
         left << @block.to_sexp if @block
 
         sexp = [:masgn, left]
+        sexp += @post.body.map { |x| x.to_sexp } if @post
         sexp << @right.to_sexp if @right
         sexp
       end

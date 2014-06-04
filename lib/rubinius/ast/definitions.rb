@@ -552,12 +552,12 @@ module CodeTools
         end
 
         if node.splat
-          n = node.splat
-          case n
+          s = node.splat
+          case s
           when EmptySplat
-            array << SplatPatternVariable.new(n.line, :*)
+            array << SplatPatternVariable.new(s.line, :*)
           when SplatAssignment, SplatWrapped, SplatArray
-            array << SplatPatternVariable.new(n.value.line, n.value.name)
+            array << SplatPatternVariable.new(s.value.line, s.value.name)
           end
         end
 

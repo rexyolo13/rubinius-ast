@@ -150,7 +150,7 @@ module CodeTools
       end
 
       def to_sexp
-        @array.inject([:hash]) { |s, x| s << x.to_sexp }
+        @array.inject([:hash]) { |s, x| s << (x ? x.to_sexp : [:hash_splat]) }
       end
     end
 

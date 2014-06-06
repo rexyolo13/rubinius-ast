@@ -132,14 +132,55 @@ module CodeTools
         g.send :new_from_literal, 1
 
         while i < count
-          k = @array[i]
-          v = @array[i + 1]
+          key = @array[i]
+          value = @array[i + 1]
 
-          g.dup
-          k.bytecode(g)
-          v.bytecode(g)
-          g.send :[]=, 2
-          g.pop
+          if key
+            g.dup
+            key.bytecode(g)
+            value.bytecode(g)
+            g.send :[]=, 2
+            g.pop
+          else
+            case value
+            when HashLiteral
+              value.merge_entries_bytecode(g)
+            else
+              g.push_literal Compiler::Runtime
+              g.swap
+              value.bytecode(g)
+              g.send :splat_hash_value, 2
+            end
+          end
+
+          i += 2
+        end
+      end
+
+      def merge_entries_bytecode(g)
+        count = @array.size
+        i = 0
+
+        while i < count
+          key = @array[i]
+          value = @array[i + 1]
+          if key
+            g.push_literal Compiler::Runtime
+            g.swap
+            key.bytecode(g)
+            value.bytecode(g)
+            g.send :splat_hash_entry, 3
+          else
+            case value
+            when HashLiteral
+              value.merge_entries_bytecode(g)
+            else
+              g.push_literal Compiler::Runtime
+              g.swap
+              value.bytecode(g)
+              g.send :splat_hash_value, 2
+            end
+          end
 
           i += 2
         end

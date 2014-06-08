@@ -11,8 +11,50 @@ module CodeTools
       end
 
       def bytecode(g)
+        done = g.new_label
+
         @value.bytecode(g)
-        g.cast_array unless @value.kind_of? ArrayLiteral
+        kind_of_array(g, done)
+
+        coerce = g.new_label
+
+        g.dup
+        g.push_literal :to_a
+        g.send :respond_to?, 1, true
+        g.git coerce
+
+        g.make_array 1
+        g.goto done
+
+        coerce.set!
+        g.dup
+        g.send :to_a, 0, true
+
+        discard = g.new_label
+        kind_of_array(g, discard)
+
+        g.push_type
+        g.move_down 2
+        g.push_literal :to_a
+        g.push_cpath_top
+        g.find_const :Array
+        g.send :coerce_to_type_error, 4, true
+        g.goto done
+
+        discard.set!
+        g.swap
+        g.pop
+
+        done.set!
+      end
+
+      def kind_of_array(g, label)
+        g.dup
+        g.push_cpath_top
+        g.find_const :Array
+        g.swap
+        g.kind_of
+        g.git label
       end
 
       def to_sexp

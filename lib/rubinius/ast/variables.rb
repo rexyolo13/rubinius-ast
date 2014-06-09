@@ -648,84 +648,268 @@ module CodeTools
       end
 
       def bytecode(g, array_on_stack=false)
-        unless array_on_stack
-          g.cast_array unless @right or (@splat and not @left)
-        end
-
         declare_local_scope(g.state.scope)
 
-        if @fixed
-          pad_short(g) if @left and !@splat
-          @right.body.each { |x| x.bytecode(g) }
-
-          if @left
-            make_retval(g)
-
-            if @splat
-              pad_short(g)
-              make_array(g)
-            end
-
-            rotate(g)
-
-            g.state.push_masgn
-            @left.body.each do |x|
-              x.bytecode(g)
-              g.pop
-            end
-            g.state.pop_masgn
-
-            pop_excess(g) unless @splat
-          end
+        case @right
+        when ArrayLiteral, SplatValue
+          @right.bytecode(g)
+          g.dup
+        when ToArray
+          @right.value.bytecode(g)
+          g.dup
+          convert_to_ary(g)
+        when nil
+          convert_to_ary(g)
         else
-          if @right
-            if @right.kind_of? ArrayLiteral and @right.body.size == 1
-              @right.body.first.bytecode(g)
-              g.cast_multi_value
-            else
-              @right.bytecode(g)
-            end
-
-            g.cast_array unless @right.kind_of? ToArray
-            g.dup # Use the array as the return value
-          end
-
-          if @left
-            g.state.push_masgn
-            @left.body.each do |x|
-              g.shift_array
-              g.cast_array if x.kind_of? MultipleAssignment and x.left
-              x.bytecode(g)
-              g.pop
-            end
-            g.state.pop_masgn
-          end
-
-          if @post
-            g.state.push_masgn
-            @post.body.reverse_each do |x|
-              g.dup
-              g.send :pop, 0
-              g.cast_array if x.kind_of? MultipleAssignment and x.left
-              x.bytecode(g)
-              g.pop
-            end
-            g.state.pop_masgn
-          end
+          @right.bytecode(g)
+          g.dup
+          convert_to_ary(g)
         end
+
+        size = g.new_stack_local
+        g.dup
+        g.send :size, 0, true
+        g.set_stack_local size
+        g.pop
+
+        index = g.new_stack_local
+        g.push 0
+        g.set_stack_local index
+        g.pop
+
+        g.state.push_masgn
+
+        assign_values g, @left, index if @left
 
         if @splat
-          g.state.push_masgn
-          @splat.bytecode(g)
+          g.dup
+          g.push_stack_local index
 
-          # Use the array as the return value
-          g.dup if @fixed and !@left
+          check_count = g.new_label
 
-          g.state.pop_masgn
+          if @post
+            g.push_stack_local size
+            g.push @post.body.size
+            g.send :-, 1, true
+
+            g.push_stack_local index
+            g.send :-, 1, true
+
+            g.goto check_count
+          else
+            g.push_stack_local size
+            g.push_stack_local index
+            g.send :-, 1, true
+
+            g.goto check_count
+          end
+
+          underflow = g.new_label
+          assign_splat = g.new_label
+
+          underflow.set!
+          g.pop
+          g.pop
+          g.pop
+          g.make_array 0
+
+          g.goto assign_splat
+
+          check_count.set!
+          g.dup
+          g.push 0
+          g.send :<, 1, true
+          g.git underflow
+
+          g.dup
+          g.push_stack_local index
+          g.send :+, 1, true
+          g.set_stack_local index
+          g.pop
+
+          g.send :[], 2, true
+
+          assign_splat.set!
+
+          # TODO: Fix nodes to work correctly.
+          case @splat
+          when EmptySplat
+            # nothing
+          when SplatArray, SplatWrapped
+            @splat.value.bytecode(g)
+          else
+            @splat.bytecode(g)
+          end
+          g.pop
         end
 
-        g.pop if @right and (!@fixed or @splat)
+        assign_values g, @post, index if @post
+
+        g.state.pop_masgn
+        g.pop
       end
+
+      def convert_to_ary(g)
+        done = g.new_label
+        coerce = g.new_label
+        make_array = g.new_label
+
+        kind_of_array(g, done)
+
+        g.dup
+        g.push_literal :to_ary
+        g.push :true
+        g.send :respond_to?, 2, true
+        g.git coerce
+
+        make_array.set!
+        g.make_array 1
+        g.goto done
+
+        coerce.set!
+        g.dup
+        g.send :to_ary, 0, true
+
+        discard = g.new_label
+        check_array = g.new_label
+
+        g.dup
+        g.push :nil
+        g.send :equal?, 1, true
+        g.gif check_array
+
+        g.pop
+        g.goto make_array
+
+        check_array.set!
+        kind_of_array(g, discard)
+
+        g.push_type
+        g.move_down 2
+        g.push_literal :to_ary
+        g.push_cpath_top
+        g.find_const :Array
+        g.send :coerce_to_type_error, 4, true
+        g.goto done
+
+        discard.set!
+        g.swap
+        g.pop
+
+        done.set!
+      end
+
+      def kind_of_array(g, label)
+        g.dup
+        g.push_cpath_top
+        g.find_const :Array
+        g.swap
+        g.kind_of
+        g.git label
+      end
+
+      def get_element(g, index)
+        g.dup
+        g.push_stack_local index
+
+        g.dup
+        g.push 1
+        g.send :+, 1, true
+        g.set_stack_local index
+        g.pop
+
+        g.send :[], 1, true
+        # g.invoke_primitive :array_aref, 1
+      end
+
+      def assign_values(g, array, index)
+        array.body.each do |x|
+          get_element(g, index)
+          g.dup if x.kind_of? MultipleAssignment
+          x.bytecode(g)
+          g.pop
+        end
+      end
+
+      # def bytecode(g, array_on_stack=false)
+      #   unless array_on_stack
+      #     g.cast_array unless @right or (@splat and not @left)
+      #   end
+
+      #   declare_local_scope(g.state.scope)
+
+      #   if @fixed
+      #     pad_short(g) if @left and !@splat
+      #     @right.body.each { |x| x.bytecode(g) }
+
+      #     if @left
+      #       make_retval(g)
+
+      #       if @splat
+      #         pad_short(g)
+      #         make_array(g)
+      #       end
+
+      #       rotate(g)
+
+      #       g.state.push_masgn
+      #       @left.body.each do |x|
+      #         x.bytecode(g)
+      #         g.pop
+      #       end
+      #       g.state.pop_masgn
+
+      #       pop_excess(g) unless @splat
+      #     end
+      #   else
+      #     if @right
+      #       if @right.kind_of? ArrayLiteral and @right.body.size == 1
+      #         @right.body.first.bytecode(g)
+      #         # g.cast_multi_value
+      #       else
+      #         @right.bytecode(g)
+      #       end
+
+      #       g.dup # Use the array as the return value
+      #       g.cast_array unless @right.kind_of? ToArray
+      #     end
+
+      #     if @left
+      #       g.state.push_masgn
+      #       @left.body.each do |x|
+      #         g.shift_array
+      #         g.cast_array if x.kind_of? MultipleAssignment and x.left
+      #         x.bytecode(g)
+      #         g.pop
+      #       end
+      #       g.state.pop_masgn
+      #     end
+
+      #     if @post
+      #       g.state.push_masgn
+      #       @post.body.reverse_each do |x|
+      #         g.dup
+      #         g.send :pop, 0
+      #         g.cast_array if x.kind_of? MultipleAssignment and x.left
+      #         x.bytecode(g)
+      #         g.pop
+      #       end
+      #       g.state.pop_masgn
+      #     end
+      #   end
+
+      #   if @splat
+      #     g.state.push_masgn
+      #     @splat.bytecode(g)
+
+      #     # Use the array as the return value
+      #     g.dup if @fixed and !@left
+
+      #     g.state.pop_masgn
+      #   end
+
+      #   g.pop if @right and (!@fixed or @splat)
+      # end
 
       def defined(g)
         g.push_literal "assignment"

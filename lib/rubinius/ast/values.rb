@@ -12,17 +12,19 @@ module CodeTools
 
       def bytecode(g)
         done = g.new_label
+        coerce = g.new_label
+        make_array = g.new_label
 
         @value.bytecode(g)
         kind_of_array(g, done)
 
-        coerce = g.new_label
-
         g.dup
         g.push_literal :to_a
-        g.send :respond_to?, 1, true
+        g.push :true
+        g.send :respond_to?, 2, true
         g.git coerce
 
+        make_array.set!
         g.make_array 1
         g.goto done
 
@@ -31,6 +33,17 @@ module CodeTools
         g.send :to_a, 0, true
 
         discard = g.new_label
+        check_array = g.new_label
+
+        g.dup
+        g.push :nil
+        g.send :equal?, 1, true
+        g.gif check_array
+
+        g.pop
+        g.goto make_array
+
+        check_array.set!
         kind_of_array(g, discard)
 
         g.push_type
@@ -79,12 +92,74 @@ module CodeTools
         if @array
           @array.bytecode(g)
           @rest.bytecode(g)
-          g.cast_array
+          convert_to_a(g)
+          # g.cast_array
           g.send :+, 1
         else
           @rest.bytecode(g)
-          g.cast_array
+          convert_to_a(g)
+          # g.cast_array
         end
+      end
+
+      # TODO: de-dup
+      def convert_to_a(g)
+        done = g.new_label
+        coerce = g.new_label
+        make_array = g.new_label
+
+        kind_of_array(g, done)
+
+        g.dup
+        g.push_literal :to_a
+        g.push :true
+        g.send :respond_to?, 2, true
+        g.git coerce
+
+        make_array.set!
+        g.make_array 1
+        g.goto done
+
+        coerce.set!
+        g.dup
+        g.send :to_a, 0, true
+
+        discard = g.new_label
+        check_array = g.new_label
+
+        g.dup
+        g.push :nil
+        g.send :equal?, 1, true
+        g.gif check_array
+
+        g.pop
+        g.goto make_array
+
+        check_array.set!
+        kind_of_array(g, discard)
+
+        g.push_type
+        g.move_down 2
+        g.push_literal :to_a
+        g.push_cpath_top
+        g.find_const :Array
+        g.send :coerce_to_type_error, 4, true
+        g.goto done
+
+        discard.set!
+        g.swap
+        g.pop
+
+        done.set!
+      end
+
+      def kind_of_array(g, label)
+        g.dup
+        g.push_cpath_top
+        g.find_const :Array
+        g.swap
+        g.kind_of
+        g.git label
       end
 
       # Dive down and try to find an array of regular values

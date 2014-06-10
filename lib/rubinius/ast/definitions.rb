@@ -80,7 +80,7 @@ module CodeTools
       end
 
       def strip_arguments
-        if @array.first.kind_of? FormalArguments
+        if @array.first.kind_of? Parameters
           node = @array.shift
           if @array.first.kind_of? BlockArgument
             node.block_arg = @array.shift
@@ -299,7 +299,7 @@ module CodeTools
       end
     end
 
-    class FormalArguments < Node
+    class Parameters < Node
       attr_accessor :names, :required, :optional, :defaults, :splat,
                     :post, :keywords, :kwrest
       attr_reader :block_arg, :block_index

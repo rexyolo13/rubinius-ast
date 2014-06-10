@@ -131,7 +131,7 @@ module CodeTools
       def initialize(line, receiver, name, arguments, privately=false)
         super line, receiver, name, privately
         @block = nil
-        @arguments = ActualArguments.new line, arguments
+        @arguments = Arguments.new line, arguments
       end
 
       def bytecode(g)
@@ -167,7 +167,7 @@ module CodeTools
 
         @name = :"#{name}="
 
-        @arguments = ActualArguments.new line, arguments
+        @arguments = Arguments.new line, arguments
       end
 
       def bytecode(g)
@@ -209,9 +209,9 @@ module CodeTools
 
         case arguments
         when PushArgs
-          @arguments = PushActualArguments.new arguments
+          @arguments = PushArguments.new arguments
         else
-          @arguments = ActualArguments.new line, arguments
+          @arguments = Arguments.new line, arguments
         end
       end
 
@@ -285,7 +285,7 @@ module CodeTools
       end
     end
 
-    class PushActualArguments
+    class PushArguments
       def initialize(pa)
         @arguments = pa.arguments
         @value = pa.value
@@ -404,7 +404,7 @@ module CodeTools
       end
     end
 
-    class ActualArguments < Node
+    class Arguments < Node
       attr_accessor :array, :splat
 
       def initialize(line, arguments=nil)
@@ -898,7 +898,7 @@ module CodeTools
         @line = line
         @block = nil
         @name = nil
-        @arguments = ActualArguments.new line, arguments
+        @arguments = Arguments.new line, arguments
       end
 
       def block_bytecode(g)
@@ -958,7 +958,7 @@ module CodeTools
           arguments = ArrayLiteral.new line, [arguments]
         end
 
-        @arguments = ActualArguments.new line, arguments
+        @arguments = Arguments.new line, arguments
         @argument_count = @arguments.size
         @yield_splat = false
 

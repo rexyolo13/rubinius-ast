@@ -110,7 +110,7 @@ module CodeTools
         @receiver = receiver
         @op = op
         arguments = nil if arguments.is_a?(EmptyArray)
-        @arguments = ActualArguments.new line, arguments
+        @arguments = Arguments.new line, arguments
         @value = value
       end
 

@@ -470,7 +470,7 @@ module CodeTools
       end
 
       def to_actual(line)
-        arguments = ActualArguments.new line
+        arguments = Arguments.new line
 
         last = -1
         last -= 1 if @block_arg and @block_arg.name == names[last]

@@ -79,6 +79,8 @@ module CodeTools
           meth.total_args = arguments.total_args
           meth.splat_index = arguments.splat_index
           meth.block_index = arguments.block_index
+          meth.arity = arguments.arity
+          meth.keywords = arguments.keywords.entries if arguments.keywords
         end
 
         meth

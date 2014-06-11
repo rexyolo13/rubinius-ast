@@ -79,7 +79,7 @@ module CodeTools
         @locals = nil
       end
 
-      def strip_arguments
+      def extract_arguments
         if @array.first.kind_of? Parameters
           node = @array.shift
           if @array.first.kind_of? BlockArgument
@@ -191,7 +191,7 @@ module CodeTools
       def initialize(line, name, block)
         @line = line
         @name = name
-        @arguments = block.strip_arguments
+        @arguments = block.extract_arguments
         block.array << NilLiteral.new(line) if block.array.empty?
         @body = block
       end
@@ -307,30 +307,22 @@ module CodeTools
       def initialize(line, required, optional, splat, post, kwargs, kwrest, block)
         @line = line
         @defaults = nil
+        @keywords = nil
         @block_arg = nil
         @splat_index = nil
         @block_index = nil
+        @locals = []
+        @local_index = 0
 
-        @required = []
         names = []
 
-        if required
-          required.each do |arg|
-            case arg
-            when Symbol
-              names << arg
-              @required << arg
-            when MultipleAssignment
-              @required << PatternArguments.from_masgn(arg)
-              @splat_index = -4 if @required.size == 1
-            end
-          end
-        end
+        process_fixed_arguments required, @required = [], names
 
         if optional
           @defaults = DefaultArguments.new line, optional
           @optional = @defaults.names
           names.concat @optional
+          @locals.concat @defaults.arguments
         else
           @optional = []
         end
@@ -338,67 +330,93 @@ module CodeTools
         case splat
         when Symbol
           names << splat
+          @locals << splat
         when true
           splat = :*
           names << splat
+          @locals << local_placeholder
         when false
-          @splat_index = -3
-          splat = nil
+          splat = :*
+          @locals << local_placeholder
+          # @splat_index = -3
+          # splat = nil
         end
 
         @splat = splat
 
-        @post = []
-        if post
-          post.each do |arg|
-            case arg
-            when MultipleAssignment
-              @post << PatternArguments.from_masgn(arg)
-            when Symbol
-              @post << arg
-              names << arg
-            end
-          end
-        end
+        process_fixed_arguments post, @post = [], names
 
         if kwargs
-          @keywords = KeywordArguments.new line, kwargs
+          @keywords = KeywordParameters.new line, kwargs, kwrest
           names.concat @keywords.names
-        else
-          @keywords = nil
+        elsif kwrest
+          @keywords = KeywordParameters.new line, nil, kwrest
         end
 
-        case kwrest
-        when Symbol
-          names << kwrest
-        when true
-          kwrest = :**
-          names << kwrest
-        end
-
-        @kwrest = kwrest
-
-        if block
-          @block_arg = BlockArgument.new line, block
-          names << block
-          @block_index = names.length - 1
+        if @keywords
+          var = local_placeholder
+          @keywords.value = LocalVariableAccess.new line, var
+          @locals << var
         end
 
         @names = names
+
+        self.block_arg = block
       end
 
-      def block_arg=(node)
-        @names << node.name
+      def process_fixed_arguments(array, arguments, names)
+        if array
+          array.each do |arg|
+            case arg
+            when Symbol
+              var = local_name arg
+              names << var
+            when MultipleAssignment
+              var = arg
+              var.right = LocalVariableAccess.new line, local_placeholder
+              # @required << PatternArguments.from_masgn(arg)
+              # @splat_index = -4 if @required.size == 1
+            end
 
-        @block_index = @names.length - 1
-        @block_arg = node
+            arguments << var
+            @locals << var
+          end
+        end
+      end
+
+      def local_name(argument)
+        local_placeholder if argument == :_ and @local_index > 0
+        argument
+      end
+
+      def local_placeholder
+        :"_:#{@local_index += 1}"
+      end
+
+      def block_arg=(block)
+        case block
+        when BlockArgument
+          @block_arg = block
+        when nil
+          return
+        else
+          @block_arg = BlockArgument.new @line, block
+        end
+
+        if @locals.last.kind_of? BlockArgument
+          @block_index -= 1
+          @locals.pop
+        end
+        @names.pop if @names.last.kind_of? BlockArgument
+
+        @block_index = @locals.size
+        @locals << @block_arg
+        @names << @block_arg.name
       end
 
       def required_args
         @required.size + @post.size
       end
-
-      alias_method :arity, :required_args
 
       def post_args
         @post.size
@@ -409,80 +427,112 @@ module CodeTools
       end
 
       def splat_index
-        return @splat_index if @splat_index
+        return @required.size + @optional.size if @splat
 
-        if @splat
-          index = @names.size
-          index -= 1 if @block_arg
-          index -= 1 if @splat.kind_of? Symbol
-          index -= @post.size
-          index
+        # return @splat_index if @splat_index
+
+        # if @splat
+        #   index = @names.size
+        #   index -= 1 if @block_arg
+        #   index -= 1 if @splat.kind_of? Symbol
+        #   index -= @post.size
+        #   index
+        # end
+      end
+
+      def arity
+        arity = required_args
+
+        if @keywords and @keywords.required?
+          arity += 1
         end
+
+        if @splat or not @optional.empty? or
+            (@keywords and not @keywords.required?)
+          arity += 1
+        end
+
+        if @splat or not @optional.empty? or
+            (@keywords and not @keywords.required?)
+          arity = -arity
+        end
+
+        arity
       end
 
       def map_arguments(scope)
-        @required.each_with_index do |arg, index|
-          case arg
-          when PatternArguments
-            arg.map_arguments scope
+        @locals.map do |v|
+          case v
           when Symbol
-            @required[index] = arg = :"_#{index}" if arg == :_ and index > 0
-            scope.new_local arg
+            scope.new_local v
+          when MultipleAssignment
+            scope.assign_local_reference v.right
+          else
+            scope.assign_local_reference v
           end
         end
 
-        @defaults.map_arguments scope if @defaults
-        scope.new_local @splat if @splat.kind_of? Symbol
+        @keywords.map_arguments(scope) if @keywords
 
-        @post.each do |arg|
-          case arg
-          when PatternArguments
-            arg.map_arguments scope
-          when Symbol
-            scope.new_local arg
-          end
-        end
+        # @required.each do |arg|
+        #   case arg
+        #   when MultipleAssignment
+        #     arg.map_arguments scope
+        #   when Symbol
+        #     scope.new_local arg
+        #   end
+        # end
 
-        scope.assign_local_reference @block_arg if @block_arg
+        # @defaults.map_arguments scope if @defaults
+        # scope.new_local @splat if @splat.kind_of? Symbol
+
+        # @post.each do |arg|
+        #   case arg
+        #   when PatternArguments
+        #     arg.map_arguments scope
+        #   when Symbol
+        #     scope.new_local arg
+        #   end
+        # end
+
+        # scope.assign_local_reference @block_arg if @block_arg
       end
 
       def bytecode(g)
         g.state.check_for_locals = false
         map_arguments g.state.scope
 
-        @required.each do |arg|
-          if arg.kind_of? PatternArguments
-            arg.argument.position_bytecode(g)
+        @required.each_with_index do |arg, index|
+          # if arg.kind_of? PatternArguments
+          if arg.kind_of? MultipleAssignment
+            g.push_local index
+            # arg.argument.position_bytecode(g)
             arg.bytecode(g)
             g.pop
           end
         end
+
         @defaults.bytecode(g) if @defaults
-        @block_arg.bytecode(g) if @block_arg
+
+        index = @required.size + @optional.size
+        index += 1 if @splat_index
+
         @post.each do |arg|
-          if arg.kind_of? PatternArguments
-            arg.argument.position_bytecode(g)
+          # if arg.kind_of? PatternArguments
+          if arg.kind_of? MultipleAssignment
+            # arg.argument.position_bytecode(g)
+            g.push_local index
+            index += 1
             arg.bytecode(g)
             g.pop
           end
         end
+
+        @keywords.bytecode(g) if @keywords
+
+        @block_arg.bytecode(g) if @block_arg
+
         g.state.check_for_locals = true
-      end
-
-      def to_actual(line)
-        arguments = Arguments.new line
-
-        last = -1
-        last -= 1 if @block_arg and @block_arg.name == names[last]
-        last -= 1 if @splat == names[last]
-
-        arguments.array = @names[0..last].map { |name| LocalVariableAccess.new line, name }
-
-        if @splat.kind_of? Symbol
-          arguments.splat = SplatValue.new(line, LocalVariableAccess.new(line, @splat))
-        end
-
-        arguments
       end
 
       def to_sexp
@@ -517,12 +567,6 @@ module CodeTools
         end
 
         sexp += @keywords.names if @keywords
-
-        if @kwrest == :**
-          sexp << :**
-        elsif @kwrest
-          sexp << :"**#{@kwrest}"
-        end
 
         sexp << :"&#{@block_arg.name}" if @block_arg
 
@@ -651,17 +695,49 @@ module CodeTools
       end
     end
 
-    class KeywordArguments < Node
-      attr_accessor :arguments, :defaults, :names
+    class KeywordParameters < Node
+      attr_accessor :arguments, :defaults, :names, :kwrest, :value
 
-      def initialize(line, block)
+      def initialize(line, block, kwrest)
         @line = line
-        array = block.array
-        @names = array.map { |a| a.name }
-        @defaults = array.reject do |a|
-          a.value.kind_of? SymbolLiteral and a.value.value == :*
+        @kwrest = kwrest
+
+        if block
+          array = block.array
+          @names = array.map { |a| a.name }
+          @defaults = array.reject do |a|
+            a.value.kind_of? SymbolLiteral and a.value.value == :*
+          end
+          @arguments = array
+        else
+          @names = []
+          @defaults = []
+          @arguments = []
         end
-        @arguments = array
+
+        case kwrest
+        when Symbol
+          @kwrest = :"**#{kwrest}"
+        when true
+          @kwrest = :**
+        end
+
+        @names << @kwrest if @kwrest
+      end
+
+      def required?
+        @defaults.size < @arguments.size
+      end
+
+      def entries
+        entries = []
+
+        @arguments.map do |a|
+          entries << a.name
+          entries << a.value.kind_of?(SymbolLiteral) && a.value.value == :*
+        end
+
+        entries
       end
 
       def map_arguments(scope)
@@ -673,7 +749,7 @@ module CodeTools
           done = g.new_label
 
           g.push_local arg.variable.slot
-          g.push :undef
+          g.push_undef
           g.send :equal?, 1, false
           g.git done
           arg.bytecode(g)
@@ -685,8 +761,9 @@ module CodeTools
 
       def to_sexp
         sexp = [:block]
-        sexp << @names
-        sexp << @defaults.map { |x| x.to_sexp }
+        sexp << @names unless @names.empty?
+        sexp << @defaults.map { |x| x.to_sexp } unless @defaults.empty?
+        sexp
       end
     end
 

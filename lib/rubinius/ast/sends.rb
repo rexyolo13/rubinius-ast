@@ -615,7 +615,7 @@ module CodeTools
 
     class IterArguments < Node
       attr_accessor :prelude, :arity, :optional, :arguments, :splat_index, :block_index
-      attr_accessor :required_args
+      attr_accessor :required_args, :keywords
 
       def initialize(line, arguments)
         @line = line

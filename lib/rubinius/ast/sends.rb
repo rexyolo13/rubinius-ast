@@ -771,6 +771,14 @@ module CodeTools
     end
 
     class For < Iter
+      def initialize(line, arguments, body)
+        @line = line
+        @arguments = ForArguments.new line, arguments
+        @body = body || NilLiteral.new(line)
+
+        new_local :"$for_args"
+      end
+
       def nest_scope(scope)
         scope.parent = self
       end
@@ -805,8 +813,8 @@ module CodeTools
       end
     end
 
-    class For19Arguments < Node
-      attr_reader :block_index
+    class ForArguments < Node
+      attr_reader :block_index, :keywords
 
       def initialize(line, arguments)
         @line = line
@@ -840,9 +848,7 @@ module CodeTools
         @args
       end
 
-      def total_args
-        @args
-      end
+      alias_method :total_args, :required_args
 
       def post_args
         0
@@ -852,18 +858,13 @@ module CodeTools
         @splat
       end
 
+      def arity
+        arity = required_args
+        arity = -arity if @splat
+      end
+
       def to_sexp
         @arguments.to_sexp
-      end
-    end
-
-    class For19 < For
-      def initialize(line, arguments, body)
-        @line = line
-        @arguments = For19Arguments.new line, arguments
-        @body = body || NilLiteral.new(line)
-
-        new_local :"$for_args"
       end
     end
 

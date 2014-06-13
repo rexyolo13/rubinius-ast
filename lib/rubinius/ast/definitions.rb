@@ -733,8 +733,10 @@ module CodeTools
         entries = []
 
         @arguments.map do |a|
+          required = a.value.kind_of?(SymbolLiteral) && a.value.value == :*
+
           entries << a.name
-          entries << a.value.kind_of?(SymbolLiteral) && a.value.value == :*
+          entries << required
         end
 
         entries

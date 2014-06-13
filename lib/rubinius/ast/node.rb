@@ -64,6 +64,8 @@ module CodeTools
         blk.total_args = arguments.total_args
         blk.splat_index = arguments.splat_index
         blk.block_index = arguments.block_index
+        blk.arity = arguments.arity
+        blk.keywords = arguments.keywords.entries if arguments.keywords
 
         blk
       end

@@ -374,8 +374,6 @@ module CodeTools
             when MultipleAssignment
               var = arg
               var.right = LocalVariableAccess.new line, local_placeholder
-              # @required << PatternArguments.from_masgn(arg)
-              # @splat_index = -4 if @required.size == 1
             end
 
             arguments << var
@@ -428,16 +426,6 @@ module CodeTools
 
       def splat_index
         return @required.size + @optional.size if @splat
-
-        # return @splat_index if @splat_index
-
-        # if @splat
-        #   index = @names.size
-        #   index -= 1 if @block_arg
-        #   index -= 1 if @splat.kind_of? Symbol
-        #   index -= @post.size
-        #   index
-        # end
       end
 
       def arity
@@ -473,29 +461,6 @@ module CodeTools
         end
 
         @keywords.map_arguments(scope) if @keywords
-
-        # @required.each do |arg|
-        #   case arg
-        #   when MultipleAssignment
-        #     arg.map_arguments scope
-        #   when Symbol
-        #     scope.new_local arg
-        #   end
-        # end
-
-        # @defaults.map_arguments scope if @defaults
-        # scope.new_local @splat if @splat.kind_of? Symbol
-
-        # @post.each do |arg|
-        #   case arg
-        #   when PatternArguments
-        #     arg.map_arguments scope
-        #   when Symbol
-        #     scope.new_local arg
-        #   end
-        # end
-
-        # scope.assign_local_reference @block_arg if @block_arg
       end
 
       def bytecode(g)
@@ -503,10 +468,8 @@ module CodeTools
         map_arguments g.state.scope
 
         @required.each_with_index do |arg, index|
-          # if arg.kind_of? PatternArguments
           if arg.kind_of? MultipleAssignment
             g.push_local index
-            # arg.argument.position_bytecode(g)
             arg.bytecode(g)
             g.pop
           end
@@ -518,9 +481,7 @@ module CodeTools
         index += 1 if @splat_index
 
         @post.each do |arg|
-          # if arg.kind_of? PatternArguments
           if arg.kind_of? MultipleAssignment
-            # arg.argument.position_bytecode(g)
             g.push_local index
             index += 1
             arg.bytecode(g)
@@ -574,92 +535,6 @@ module CodeTools
         sexp << @keywords.to_sexp if @keywords
 
         sexp
-      end
-    end
-
-    class PatternArguments < Node
-      attr_accessor :arguments, :argument
-
-      def self.from_masgn(node)
-        array = []
-        size = 0
-        if node.left
-          size += node.left.body.size
-          node.left.body.map do |n|
-            case n
-            when MultipleAssignment
-              array << PatternArguments.from_masgn(n)
-            when LocalVariable
-              array << LeftPatternVariable.new(n.line, n.name)
-            end
-          end
-        end
-
-        if node.splat
-          s = node.splat
-          case s
-          when EmptySplat
-            array << SplatPatternVariable.new(s.line, :*)
-          when SplatAssignment, SplatWrapped, SplatArray
-            array << SplatPatternVariable.new(s.value.line, s.value.name)
-          end
-        end
-
-        if node.post
-          idx = 0
-          node.post.body.map do |n|
-            case n
-            when MultipleAssignment
-              array << PatternArguments.from_masgn(n)
-            when LocalVariable
-              array << PostPatternVariable.new(n.line, n.name, idx)
-            end
-            idx += 1
-          end
-        end
-
-        PatternArguments.new node.line, ArrayLiteral.new(node.line, array)
-      end
-
-      def initialize(line, arguments)
-        @line = line
-        @arguments = arguments
-        @argument = nil
-      end
-
-      # Assign the left-most, depth-first PatternVariable so that this local
-      # will be assigned the passed argument at that position. The rest of the
-      # pattern will be destructured from the value of this assignment.
-      def map_arguments(scope)
-        arguments = @arguments.body
-        while arguments
-          node = arguments.first
-          case node
-          when LeftPatternVariable, PostPatternVariable, SplatPatternVariable
-            @argument = node
-            scope.new_local node.name
-            scope.assign_local_reference node
-            return
-          end
-          arguments = node.arguments.body
-        end
-      end
-
-      def bytecode(g)
-        @arguments.body.each do |arg|
-          if arg.kind_of? PatternArguments
-            g.shift_array
-            g.cast_array
-            arg.bytecode(g)
-            g.pop
-          else
-            arg.bytecode(g)
-          end
-        end
-      end
-
-      def to_sexp
-        [:masgn, @arguments.to_sexp]
       end
     end
 

@@ -369,9 +369,12 @@ module CodeTools
         if array
           array.each do |arg|
             case arg
+            when :_
+              var = names.include?(:_) ? local_placeholder : arg
+              names << arg
             when Symbol
-              var = local_name arg
-              names << var
+              var = arg
+              names << arg
             when MultipleAssignment
               var = arg
               var.right = LocalVariableAccess.new line, local_placeholder
@@ -384,11 +387,6 @@ module CodeTools
             @locals << var
           end
         end
-      end
-
-      def local_name(argument)
-        local_placeholder if argument == :_ and @local_index > 0
-        argument
       end
 
       def local_placeholder

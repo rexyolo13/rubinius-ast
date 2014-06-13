@@ -491,7 +491,7 @@ module CodeTools
 
       def initialize(line, arguments, body)
         @line = line
-        @arguments = arguments || IterArguments.new(line, nil)
+        @arguments = arguments || Parameters.new(line)
         @body = body || NilLiteral.new(line)
 
         if @body.kind_of?(Block) and @body.locals
@@ -773,7 +773,7 @@ module CodeTools
     class For < Iter
       def initialize(line, arguments, body)
         @line = line
-        @arguments = ForArguments.new line, arguments
+        @arguments = Parameters.new line, arguments
         @body = body || NilLiteral.new(line)
 
         new_local :"$for_args"
@@ -810,61 +810,6 @@ module CodeTools
 
       def sexp_name
         :for
-      end
-    end
-
-    class ForArguments < Node
-      attr_reader :block_index, :keywords
-
-      def initialize(line, arguments)
-        @line = line
-        @arguments = arguments
-
-        if @arguments.kind_of? MultipleAssignment
-          @args = 0
-          @splat = 0
-        else
-          @args = 1
-          @splat = nil
-        end
-      end
-
-      def bytecode(g)
-        if @splat
-          g.push_literal Compiler::Runtime
-          g.push_local 0
-          g.send :unwrap_block_arg, 1
-        else
-          g.push_local 0
-        end
-
-        g.state.push_masgn
-        @arguments.bytecode(g)
-        g.state.pop_masgn
-        g.pop
-      end
-
-      def required_args
-        @args
-      end
-
-      alias_method :total_args, :required_args
-
-      def post_args
-        0
-      end
-
-      def splat_index
-        @splat
-      end
-
-      def arity
-        arity = required_args
-        arity = -arity if @splat
-      end
-
-      def to_sexp
-        @arguments.to_sexp
       end
     end
 

@@ -79,7 +79,7 @@ module CodeTools
         @locals = nil
       end
 
-      def extract_arguments
+      def extract_parameters
         if @array.first.kind_of? Parameters
           node = @array.shift
           if @array.first.kind_of? BlockArgument
@@ -191,7 +191,7 @@ module CodeTools
       def initialize(line, name, block)
         @line = line
         @name = name
-        @arguments = block.extract_arguments
+        @arguments = block.extract_parameters
         block.array << NilLiteral.new(line) if block.array.empty?
         @body = block
       end
@@ -304,7 +304,8 @@ module CodeTools
                     :post, :keywords, :kwrest
       attr_reader :block_arg, :block_index
 
-      def initialize(line, required, optional, splat, post, kwargs, kwrest, block)
+      def initialize(line, required=nil, optional=nil, splat=nil,
+                     post=nil, kwargs=nil, kwrest=nil, block=nil)
         @line = line
         @defaults = nil
         @keywords = nil
@@ -316,7 +317,7 @@ module CodeTools
 
         names = []
 
-        process_fixed_arguments required, @required = [], names
+        process_fixed_arguments Array(required), @required = [], names
 
         if optional
           @defaults = DefaultArguments.new line, optional
@@ -374,6 +375,9 @@ module CodeTools
             when MultipleAssignment
               var = arg
               var.right = LocalVariableAccess.new line, local_placeholder
+            when VariableAssignment
+              var = arg
+              names << var.name
             end
 
             arguments << var

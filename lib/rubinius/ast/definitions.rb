@@ -605,16 +605,13 @@ module CodeTools
       end
 
       def entries
-        entries = []
+        entries = @arguments.inject([]) do |array, arg|
+          required = arg.value.kind_of?(SymbolLiteral) && arg.value.value == :*
 
-        @arguments.map do |a|
-          required = a.value.kind_of?(SymbolLiteral) && a.value.value == :*
-
-          entries << a.name
-          entries << required
+          array << [arg.name, required]
         end
 
-        entries
+        entries.sort { |a, b| a.first <=> b.first }.flatten
       end
 
       def map_arguments(scope)

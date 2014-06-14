@@ -718,6 +718,9 @@ module CodeTools
 
         kind_of_array(g, done)
 
+        wrap_tuple = g.new_label
+        kind_of_tuple(g, wrap_tuple)
+
         g.dup
         g.push_literal :to_ary
         g.push :true
@@ -726,6 +729,22 @@ module CodeTools
 
         make_array.set!
         g.make_array 1
+        g.goto done
+
+        wrap_tuple.set!
+        g.dup
+        g.make_array 0
+        g.dup
+        g.move_down 2
+        g.swap
+        g.push_literal :@tuple
+        g.swap
+        g.invoke_primitive :object_set_ivar, 3
+        g.send :size, 0, true
+        g.push_literal :@total
+        g.swap
+        g.invoke_primitive :object_set_ivar, 3
+        g.pop
         g.goto done
 
         coerce.set!
@@ -765,6 +784,15 @@ module CodeTools
         g.dup
         g.push_cpath_top
         g.find_const :Array
+        g.swap
+        g.kind_of
+        g.git label
+      end
+
+      def kind_of_tuple(g, label)
+        g.dup
+        g.push_rubinius
+        g.find_const :Tuple
         g.swap
         g.kind_of
         g.git label

@@ -339,8 +339,6 @@ module CodeTools
         when false
           splat = :*
           @locals << local_placeholder
-          # @splat_index = -3
-          # splat = nil
         end
 
         @splat = splat
@@ -457,8 +455,10 @@ module CodeTools
             scope.new_local v
           when MultipleAssignment
             scope.assign_local_reference v.right
-          else
+          when LocalVariable
             scope.assign_local_reference v
+          when nil
+            STDERR.puts @locals.inspect, self.inspect
           end
         end
 

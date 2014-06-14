@@ -773,7 +773,7 @@ module CodeTools
     class For < Iter
       def initialize(line, arguments, body)
         @line = line
-        @arguments = Parameters.new line, arguments
+        @arguments = ForParameters.new line, arguments
         @body = body || NilLiteral.new(line)
 
         new_local :"$for_args"
@@ -810,6 +810,47 @@ module CodeTools
 
       def sexp_name
         :for
+      end
+    end
+
+    class ForParameters < Node
+      attr_accessor :assignments, :required_args, :splat_index,
+                    :post_args, :keywords, :block_index
+
+      def initialize(line, assignments)
+        @line = line
+        @assignments = assignments
+        @splat_index = assignments.kind_of?(MultipleAssignment) ? 0 : nil
+        @required_args = @splat_index ? 0 : 1
+        @post_args = 0
+        @keywords = nil
+        @block_index = nil
+      end
+
+      alias_method :total_args, :required_args
+      alias_method :arity, :required_args
+
+      def map_arguments(scope)
+        case @assignments
+        when LocalVariable
+          scope.assign_local_reference @assignments
+        end
+      end
+
+      def bytecode(g)
+        map_arguments(g.state.scope)
+
+        if @splat_index
+          g.push_literal Compiler::Runtime
+          g.push_local 0
+          g.send :unwrap_block_arg, 1
+        else
+          g.push_local 0
+        end
+
+        g.state.push_masgn
+        @assignments.bytecode(g)
+        g.state.pop_masgn
       end
     end
 

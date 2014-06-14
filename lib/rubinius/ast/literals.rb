@@ -146,7 +146,8 @@ module CodeTools
             when HashLiteral
               value.merge_entries_bytecode(g)
             else
-              g.push_literal Compiler::Runtime
+              g.push_rubinius
+              g.find_const :Runtime
               g.swap
               value.bytecode(g)
               g.send :splat_hash_value, 2
@@ -165,7 +166,8 @@ module CodeTools
           key = @array[i]
           value = @array[i + 1]
           if key
-            g.push_literal Compiler::Runtime
+            g.push_rubinius
+            g.find_const :Runtime
             g.swap
             key.bytecode(g)
             value.bytecode(g)
@@ -175,7 +177,8 @@ module CodeTools
             when HashLiteral
               value.merge_entries_bytecode(g)
             else
-              g.push_literal Compiler::Runtime
+              g.push_rubinius
+              g.find_const :Runtime
               g.swap
               value.bytecode(g)
               g.send :splat_hash_value, 2

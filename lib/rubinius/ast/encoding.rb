@@ -13,7 +13,8 @@ module CodeTools
       def bytecode(g)
         pos(g)
 
-        g.push_literal Compiler::Runtime
+        g.push_rubinius
+        g.find_const :Runtime
         g.push_literal @name
         g.send :get_encoding, 1
       end

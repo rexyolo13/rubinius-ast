@@ -582,44 +582,6 @@ module CodeTools
         end
       end
 
-      def pad_short(g)
-        short = @left.body.size - @right.body.size
-        if short > 0
-          short.times { g.push :nil }
-          g.make_array 0 if @splat
-        end
-      end
-
-      def pop_excess(g)
-        excess = @right.body.size - @left.body.size
-        excess.times { g.pop } if excess > 0
-      end
-
-      def make_array(g)
-        size = @right.body.size - @left.body.size
-        g.make_array size if size >= 0
-      end
-
-      def make_retval(g)
-        size = @right.body.size
-        if @left and !@splat
-          lhs = @left.body.size
-          size = lhs if lhs > size
-        end
-        g.dup_many @right.body.size
-        g.make_array @right.body.size
-        g.move_down size
-      end
-
-      def rotate(g)
-        if @splat
-          size = @left.body.size + 1
-        else
-          size = @right.body.size
-        end
-        g.rotate size
-      end
-
       def iter_arguments
         @iter_arguments = true
       end

@@ -89,17 +89,12 @@ module CodeTools
       end
 
       def bytecode(g)
-        if @array
-          @array.bytecode(g)
-          @rest.bytecode(g)
-          convert_to_a(g)
-          # g.cast_array
-          g.send :+, 1
-        else
-          @rest.bytecode(g)
-          convert_to_a(g)
-          # g.cast_array
-        end
+        @array.bytecode(g) if @array
+
+        @rest.bytecode(g)
+        convert_to_a(g)
+
+        g.send :+, 1, true if @array
       end
 
       # TODO: de-dup

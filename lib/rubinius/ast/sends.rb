@@ -209,7 +209,7 @@ module CodeTools
 
         case arguments
         when PushArgs
-          @arguments = PushArguments.new arguments
+          @arguments = PushArguments.new line, arguments
         else
           @arguments = Arguments.new line, arguments
         end
@@ -228,13 +228,24 @@ module CodeTools
 
         @receiver.bytecode(g)
         @arguments.bytecode(g)
+
         g.dup
 
         if @arguments.splat?
-          g.move_down @arguments.size + 2
-          g.swap
+          case @arguments
+          when PushArguments
+            g.move_down @arguments.size + 2
+            g.swap
+            flag = true
+          when Arguments
+            # TODO: Optimize bytecode for x[a, *b, c, d] = e
+            g.send :last, 0, true
+            g.move_down @arguments.size + 2
+            flag = false
+          end
+
           g.push :nil
-          g.send_with_splat @name, @arguments.size, @privately, true
+          g.send_with_splat @name, @arguments.size, @privately, flag
         else
           g.move_down @arguments.size + 1
           g.send @name, @arguments.size, @privately
@@ -286,10 +297,13 @@ module CodeTools
       end
     end
 
-    class PushArguments
-      def initialize(pa)
-        @arguments = pa.arguments
-        @value = pa.value
+    class PushArguments < Node
+      attr_accessor :arguments
+
+      def initialize(line, node)
+        @line = line
+        @arguments = node.arguments
+        @value = node.value
       end
 
       def size
@@ -306,7 +320,7 @@ module CodeTools
       end
 
       def to_sexp
-        [@arguments.to_sexp, @value.to_sexp]
+        [:argspush, @arguments.to_sexp, @value.to_sexp]
       end
     end
 
@@ -358,6 +372,8 @@ module CodeTools
     end
 
     class CollectSplat < Node
+      attr_accessor :splat, :array, :last
+
       def initialize(line, *parts)
         @line = line
         @splat = parts.shift
@@ -367,7 +383,6 @@ module CodeTools
 
       def bytecode(g)
         @splat.bytecode(g)
-        g.cast_array
 
         @array.each do |x|
           x.bytecode(g)
@@ -381,13 +396,12 @@ module CodeTools
         done = g.new_label
 
         @last.bytecode(g)
+
         g.dup
-
-        g.push_const :Hash
-
-        g.push_type
-        g.move_down 2
-        g.send :object_kind_of?, 2
+        g.push_cpath_top
+        g.find_const :Hash
+        g.swap
+        g.kind_of
         g.gif not_hash
 
         g.make_array 1

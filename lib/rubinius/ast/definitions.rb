@@ -334,8 +334,7 @@ module CodeTools
           @locals << splat
         when true
           splat = :*
-          names << splat
-          @locals << local_placeholder
+          @locals << splat
         when false
           splat = nil
           @splat_index = -3

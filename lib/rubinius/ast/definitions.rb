@@ -337,8 +337,8 @@ module CodeTools
           names << splat
           @locals << local_placeholder
         when false
-          splat = :*
-          @locals << local_placeholder
+          splat = nil
+          @splat_index = -3
         end
 
         @splat = splat
@@ -425,6 +425,8 @@ module CodeTools
       end
 
       def splat_index
+        return @splat_index if @splat_index
+
         return @required.size + @optional.size if @splat
       end
 

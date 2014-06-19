@@ -502,7 +502,7 @@ module CodeTools
     class LocalVariableAssignment < VariableAssignment
       include LocalVariable
 
-      def initialize(line, name, value)
+      def initialize(line, name, value=nil)
         @line = line
         @name = name
         @value = value

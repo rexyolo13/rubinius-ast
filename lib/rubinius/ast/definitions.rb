@@ -420,7 +420,9 @@ module CodeTools
       end
 
       def total_args
-        @required.size + @optional.size + @post.size
+        args = @required.size + @optional.size + @post.size
+        args += 1 if @keywords
+        args
       end
 
       def splat_index
@@ -579,65 +581,206 @@ module CodeTools
       def initialize(line, block, kwrest)
         @line = line
         @kwrest = kwrest
+        @required = []
+        @defaults = []
 
         if block
           array = block.array
           @names = array.map { |a| a.name }
-          @defaults = array.reject do |a|
-            a.value.kind_of? SymbolLiteral and a.value.value == :*
+
+          array.each do |arg|
+            if arg.value.value == :*
+              @required << arg
+            else
+              @defaults << arg
+            end
           end
+
           @arguments = array
         else
-          @names = []
-          @defaults = []
           @arguments = []
+          @names = []
         end
 
         case kwrest
         when Symbol
-          @kwrest = :"**#{kwrest}"
+          kwrest_name = :"**#{kwrest}"
+          @kwrest = LocalVariableAssignment.new line, kwrest
         when true
-          @kwrest = :**
+          kwrest_name = :**
+          @kwrest = true
         end
 
-        @names << @kwrest if @kwrest
+        @names << kwrest_name if kwrest_name
       end
 
       def required?
-        @defaults.size < @arguments.size
+        not @required.empty?
       end
 
       def entries
-        entries = @arguments.inject([]) do |array, arg|
-          required = arg.value.kind_of?(SymbolLiteral) && arg.value.value == :*
-
-          array << [arg.name, required]
-        end
-
-        entries.sort { |a, b| a.first <=> b.first }.flatten
+        entries = []
+        @required.each { |arg| entries << arg.name << true }
+        @defaults.each { |arg| entries << arg.name << false }
+        entries
       end
 
       def map_arguments(scope)
         @arguments.each { |var| scope.assign_local_reference var }
-      end
 
-      def bytecode(g)
-        @defaults.each do |arg|
-          done = g.new_label
-
-          g.push_local arg.variable.slot
-          g.push_undef
-          g.send :equal?, 1, false
-          g.git done
-          arg.bytecode(g)
-          g.pop
-
-          done.set!
+        if @kwrest.kind_of? LocalVariableAssignment
+          scope.assign_local_reference @kwrest
         end
       end
 
+      def bytecode(g)
+        done = g.new_label
+        check_hash = g.new_label
+        assignments = g.new_label
+
+        @value.bytecode(g)
+
+        g.dup
+        g.push :nil
+        g.swap
+        g.send :equal?, 1, true
+        g.gif check_hash
+
+        g.pop
+        g.push_cpath_top
+        g.find_const :Hash
+        g.send :allocate, 0, true
+        g.goto assignments
+
+        check_hash.set!
+        kind_of_hash(g, assignments)
+
+        discard = g.new_label
+
+        g.dup
+        g.send :to_hash, 0, true
+        kind_of_hash(g, discard)
+
+        g.push_type
+        g.move_down 2
+        g.push_literal :to_hash
+        g.push_cpath_top
+        g.find_const :Hash
+        g.send :coerce_to_type_error, 4, true
+        g.goto done
+
+        discard.set!
+        g.swap
+        g.pop
+
+        missing_value = g.new_label
+
+        assignments.set!
+
+        @required.each do |arg|
+          g.dup
+          g.push_literal arg.name
+          g.send :find_item, 1, true
+
+          g.dup
+          g.gif missing_value
+
+          g.send :value, 0, true
+
+          arg.variable.set_bytecode(g)
+          g.pop
+        end
+
+        defaults = g.new_label
+        g.goto defaults
+
+        missing_value.set!
+        g.pop
+        g.push_rubinius
+        g.find_const :Runtime
+        g.swap
+        g.send :keywords_missing, 1, true
+        g.goto done
+
+        defaults.set!
+
+        extra_keys = g.new_label
+
+        if @defaults.empty?
+          g.dup
+          g.send :size, 0, true
+          g.push @arguments.size
+          g.swap
+          g.send :equal?, 1, true
+          g.gif extra_keys
+
+          if @kwrest.kind_of? LocalVariableAssignment
+            g.push_cpath_top
+            g.find_const :Hash
+            g.send :allocate, 0, true
+            @kwrest.variable.set_bytecode(g)
+            g.pop
+          end
+
+          g.goto done
+        else
+          @defaults.each do |arg|
+            next_value = g.new_label
+            default_value = g.new_label
+
+            g.dup
+            g.push_literal arg.name
+            g.send :find_item, 1, true
+
+            g.dup
+            g.gif default_value
+
+            g.send :value, 0, true
+            arg.variable.set_bytecode(g)
+            g.goto next_value
+
+            default_value.set!
+            g.pop
+            arg.bytecode(g)
+
+            next_value.set!
+            g.pop
+          end
+        end
+
+        extra_keys.set!
+
+        g.dup
+        g.push_rubinius
+        g.find_const :Runtime
+        g.swap
+
+        if @kwrest
+          g.push :true
+        else
+          g.push :false
+        end
+
+        g.send :keywords_extra, 2, true
+        if @kwrest.kind_of? LocalVariableAssignment
+          @kwrest.variable.set_bytecode(g)
+        end
+        g.pop
+
+        done.set!
+      end
+
+      def kind_of_hash(g, label)
+        g.dup
+        g.push_cpath_top
+        g.find_const :Hash
+        g.swap
+        g.kind_of
+        g.git label
+      end
+
       def to_sexp
-        sexp = [:block]
+        sexp = [:kwargs]
         sexp << @names unless @names.empty?
         sexp << @defaults.map { |x| x.to_sexp } unless @defaults.empty?
         sexp

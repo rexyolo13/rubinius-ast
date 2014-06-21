@@ -670,9 +670,7 @@ module CodeTools
           assign_splat = g.new_label
 
           underflow.set!
-          g.pop
-          g.pop
-          g.pop
+          g.pop_many 3
           g.make_array 0
 
           g.goto assign_splat

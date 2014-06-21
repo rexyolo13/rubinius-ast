@@ -233,7 +233,6 @@ module Rubinius::ToolSets.current::ToolSet
 
           fin.set!
         else
-          fin = g.new_label
           assign = g.new_label
 
           old_break = g.break
@@ -281,7 +280,6 @@ module Rubinius::ToolSets.current::ToolSet
             g.send :[]=, @arguments.size + 1
           end
 
-          fin.set!
           g.pop
         end
       end

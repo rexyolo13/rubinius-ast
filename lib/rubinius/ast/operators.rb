@@ -146,6 +146,7 @@ module CodeTools
         if @op == :or or @op == :and
           fnd = g.new_label
           fin = g.new_label
+          assign = g.new_label
 
           # We dup the value from [] to leave it as the value of the
           # expression
@@ -162,7 +163,24 @@ module CodeTools
 
           # The receiver and arguments are still on the stack
 
+          old_break = g.break
+          new_break = g.new_label
+          g.break = new_break
+
           @value.bytecode(g)
+
+          g.goto assign
+
+          new_break.set!
+          if old_break
+            g.pop_many recv_stack + 1
+            g.push :nil
+            g.goto old_break
+          end
+
+          g.break = old_break
+
+          assign.set!
 
           # retain the rhs as the expression value
           g.dup
@@ -188,10 +206,29 @@ module CodeTools
 
           fin.set!
         else
+          assign = g.new_label
+
+          old_break = g.break
+          new_break = g.new_label
+          g.break = new_break
+
           # @op is something like + or -
           # We pull in @value to the stack
           @value.bytecode(g)
           # X: 3 TOS
+
+          g.goto assign
+
+          new_break.set!
+          if old_break
+            g.pop_many recv_stack + 2
+            g.push :nil
+            g.goto old_break
+          end
+
+          g.break = old_break
+
+          assign.set!
 
           # ... then call it as an argument to @or, called on the return
           # from [].
@@ -248,7 +285,7 @@ module CodeTools
       def bytecode(g)
         pos(g)
 
-        # X: h[:a] += 3, given h.a == 2
+        # X: h.a += 3, given h.a == 2
         @receiver.bytecode(g)
         # X: TOS = h
         g.dup
@@ -258,6 +295,7 @@ module CodeTools
         if @op == :or or @op == :and
           fnd = g.new_label
           fin = g.new_label
+          assign = g.new_label
 
           g.dup
           if @op == :or
@@ -268,7 +306,25 @@ module CodeTools
 
           # Remove the copy of 2 and push @value on the stack
           g.pop
+
+          old_break = g.break
+          new_break = g.new_label
+          g.break = new_break
+
           @value.bytecode(g)
+
+          g.goto assign
+
+          new_break.set!
+          if old_break
+            g.pop_many 2
+            g.push :nil
+            g.goto old_break
+          end
+
+          g.break = old_break
+
+          assign.set!
 
           # Retain the this value to use as the expression value
           g.dup
@@ -288,7 +344,27 @@ module CodeTools
 
           fin.set!
         else
+          assign = g.new_label
+
+          old_break = g.break
+          new_break = g.new_label
+          g.break = new_break
+
           @value.bytecode(g)
+
+          g.goto assign
+
+          new_break.set!
+          if old_break
+            g.pop_many 3
+            g.push :nil
+            g.goto old_break
+          end
+
+          g.break = old_break
+
+          assign.set!
+
           # X: TOS = 3
           # X: 2 + 3
           g.send @op, 1

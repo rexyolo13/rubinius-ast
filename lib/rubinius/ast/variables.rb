@@ -541,7 +541,7 @@ module Rubinius::ToolSets.current::ToolSet
     end
 
     class MultipleAssignment < Node
-      attr_accessor :left, :right, :splat, :block, :post
+      attr_accessor :left, :right, :splat, :block
 
       def initialize(line, left, right, splat)
         @line = line
@@ -549,7 +549,6 @@ module Rubinius::ToolSets.current::ToolSet
         @right = right
         @splat = nil
         @block = nil # support for |&b|
-        @post = nil # in `a,*b,c`, c is in post.
 
         @fixed = right.kind_of?(ArrayLiteral) ? true : false
 
@@ -572,44 +571,6 @@ module Rubinius::ToolSets.current::ToolSet
           size = @fixed ? right.body.size : 0
           @splat = EmptySplat.new line, size
         end
-      end
-
-      def pad_short(g)
-        short = @left.body.size - @right.body.size
-        if short > 0
-          short.times { g.push :nil }
-          g.make_array 0 if @splat
-        end
-      end
-
-      def pop_excess(g)
-        excess = @right.body.size - @left.body.size
-        excess.times { g.pop } if excess > 0
-      end
-
-      def make_array(g)
-        size = @right.body.size - @left.body.size
-        g.make_array size if size >= 0
-      end
-
-      def make_retval(g)
-        size = @right.body.size
-        if @left and !@splat
-          lhs = @left.body.size
-          size = lhs if lhs > size
-        end
-        g.dup_many @right.body.size
-        g.make_array @right.body.size
-        g.move_down size
-      end
-
-      def rotate(g)
-        if @splat
-          size = @left.body.size + 1
-        else
-          size = @right.body.size
-        end
-        g.rotate size
       end
 
       def iter_arguments
@@ -640,83 +601,233 @@ module Rubinius::ToolSets.current::ToolSet
       end
 
       def bytecode(g, array_on_stack=false)
-        unless array_on_stack
-          g.cast_array unless @right or (@splat and not @left)
-        end
-
         declare_local_scope(g.state.scope)
 
-        if @fixed
-          pad_short(g) if @left and !@splat
-          @right.body.each { |x| x.bytecode(g) }
-
-          if @left
-            make_retval(g)
-
-            if @splat
-              pad_short(g)
-              make_array(g)
-            end
-
-            rotate(g)
-
-            g.state.push_masgn
-            @left.body.each do |x|
-              x.bytecode(g)
-              g.pop
-            end
-            g.state.pop_masgn
-
-            pop_excess(g) unless @splat
-          end
+        case @right
+        when ArrayLiteral, ConcatArgs
+          @right.bytecode(g)
+        when SplatValue
+          @right.bytecode(g)
+          convert_to_ary(g)
+        when ToArray
+          @right.bytecode(g)
+        when nil
+          convert_to_ary(g)
         else
-          if @right
-            if @right.kind_of? ArrayLiteral and @right.body.size == 1
-              @right.body.first.bytecode(g)
-              g.cast_multi_value
-            else
-              @right.bytecode(g)
-            end
+          @right.bytecode(g)
+          convert_to_a(g)
+        end
 
-            g.cast_array unless @right.kind_of? ToArray
-            g.dup # Use the array as the return value
-          end
+        size = g.new_stack_local
+        g.dup
+        g.send :size, 0, true
+        g.set_stack_local size
+        g.pop
 
-          if @left
-            g.state.push_masgn
-            @left.body.each do |x|
-              g.shift_array
-              g.cast_array if x.kind_of? MultipleAssignment and x.left
-              x.bytecode(g)
-              g.pop
-            end
-            g.state.pop_masgn
-          end
+        index = g.new_stack_local
+        g.push 0
+        g.set_stack_local index
+        g.pop
 
-          if @post
-            g.state.push_masgn
-            @post.body.each do |x|
-              g.dup
-              g.send :pop, 0
-              g.cast_array if x.kind_of? MultipleAssignment and x.left
-              x.bytecode(g)
-              g.pop
-            end
-            g.state.pop_masgn
+        g.state.push_masgn
+
+        if @left
+          @left.body.each do |x|
+            convert_to_ary(g) if x.kind_of? MultipleAssignment
+
+            get_element(g, index)
+
+            x.bytecode(g)
+            g.pop
           end
         end
 
         if @splat
-          g.state.push_masgn
-          @splat.bytecode(g)
+          g.dup
 
-          # Use the array as the return value
-          g.dup if @fixed and !@left
+          convert_to_ary(g) if @splat.kind_of? SplatValue
 
-          g.state.pop_masgn
+          g.push_stack_local index
+
+          check_count = g.new_label
+
+          g.push_stack_local size
+          g.push_stack_local index
+          g.send :-, 1, true
+
+          g.goto check_count
+
+          underflow = g.new_label
+          assign_splat = g.new_label
+
+          underflow.set!
+          g.pop_many 3
+          g.make_array 0
+
+          g.goto assign_splat
+
+          check_count.set!
+          g.dup
+          g.push 0
+          g.send :<, 1, true
+          g.git underflow
+
+          g.dup
+          g.push_stack_local index
+          g.send :+, 1, true
+          g.set_stack_local index
+          g.pop
+
+          g.send :[], 2, true
+
+          assign_splat.set!
+
+          # TODO: Fix nodes to work correctly.
+          case @splat
+          when EmptySplat
+            # nothing
+          when SplatArray, SplatWrapped
+            @splat.value.bytecode(g)
+          else
+            @splat.bytecode(g)
+          end
+          g.pop
         end
 
-        g.pop if @right and (!@fixed or @splat)
+        g.state.pop_masgn
+      end
+
+      def convert_to_a(g)
+        done = g.new_label
+        check_array = g.new_label
+
+        kind_of_array(g, done)
+
+        wrap_tuple = g.new_label
+        kind_of_tuple(g, wrap_tuple)
+
+        g.dup
+        g.send :to_a, 0, true
+        g.goto check_array
+
+        wrap_tuple.set!
+        g.dup
+        g.make_array 0
+        g.dup
+        g.move_down 2
+        g.swap
+        g.push_literal :@tuple
+        g.swap
+        g.invoke_primitive :object_set_ivar, 3
+        g.send :size, 0, true
+        g.push_literal :@total
+        g.swap
+        g.invoke_primitive :object_set_ivar, 3
+        g.pop
+        g.goto done
+
+        discard = g.new_label
+
+        check_array.set!
+        kind_of_array(g, discard)
+
+        g.push_type
+        g.move_down 2
+        g.push_literal :to_a
+        g.push_cpath_top
+        g.find_const :Array
+        g.send :coerce_to_type_error, 4, true
+        g.goto done
+
+        discard.set!
+        g.swap
+        g.pop
+
+        done.set!
+      end
+
+      def convert_to_ary(g)
+        done = g.new_label
+        coerce = g.new_label
+        make_array = g.new_label
+        coerce_method = :to_ary
+
+        kind_of_array(g, done)
+
+        g.dup
+        g.push_literal :to_ary
+        g.send :respond_to?, 1, true
+        g.git coerce
+
+        discard = g.new_label
+        check_array = g.new_label
+
+        make_array.set!
+        g.dup
+        g.send :to_a, 0, true
+        coerce_method = :to_a
+        g.goto check_array
+
+        coerce.set!
+        g.dup
+        g.send :to_ary, 0, true
+
+        g.dup
+        g.push :nil
+        g.send :equal?, 1, true
+        coerce_method = :to_ary
+        g.gif check_array
+
+        g.pop
+        g.goto make_array
+
+        check_array.set!
+        kind_of_array(g, discard)
+
+        g.push_type
+        g.move_down 2
+        g.push_literal coerce_method
+        g.push_cpath_top
+        g.find_const :Array
+        g.send :coerce_to_type_error, 4, true
+        g.goto done
+
+        discard.set!
+        g.swap
+        g.pop
+
+        done.set!
+      end
+
+      def kind_of_array(g, label)
+        g.dup
+        g.push_cpath_top
+        g.find_const :Array
+        g.swap
+        g.kind_of
+        g.git label
+      end
+
+      def kind_of_tuple(g, label)
+        g.dup
+        g.push_rubinius
+        g.find_const :Tuple
+        g.swap
+        g.kind_of
+        g.git label
+      end
+
+      def get_element(g, index)
+        g.dup
+        g.push_stack_local index
+
+        g.dup
+        g.push 1
+        g.send :+, 1, true
+        g.set_stack_local index
+        g.pop
+
+        g.send :[], 1, true
       end
 
       def defined(g)

@@ -12,7 +12,83 @@ module Rubinius::ToolSets.current::ToolSet
 
       def bytecode(g)
         @value.bytecode(g)
-        g.cast_array unless @value.kind_of? ArrayLiteral
+        return if @value.kind_of? ArrayLiteral
+
+        convert_to_ary(g)
+      end
+
+      def convert_to_ary(g)
+        done = g.new_label
+        coerce = g.new_label
+        coerce_method = :to_ary
+
+        kind_of_array(g, done)
+
+        check_respond_to = g.new_label
+
+        g.dup
+        g.push :nil
+        g.swap
+        g.send :equal?, 1, true
+        g.gif check_respond_to
+
+        g.make_array 1
+        g.goto done
+
+        check_respond_to.set!
+        g.dup
+        g.push_literal :to_ary
+        g.send :respond_to?, 1, true
+        g.git coerce
+
+        discard = g.new_label
+        check_array = g.new_label
+
+        make_array = g.new_label
+        make_array.set!
+        g.dup
+        g.send :to_a, 0, true
+        coerce_method = :to_a
+        g.goto check_array
+
+        coerce.set!
+        g.dup
+        g.send :to_ary, 0, true
+
+        g.dup
+        g.push :nil
+        g.send :equal?, 1, true
+        coerce_method = :to_ary
+        g.gif check_array
+
+        g.pop
+        g.goto make_array
+
+        check_array.set!
+        kind_of_array(g, discard)
+
+        g.push_type
+        g.move_down 2
+        g.push_literal coerce_method
+        g.push_cpath_top
+        g.find_const :Array
+        g.send :coerce_to_type_error, 4, true
+        g.goto done
+
+        discard.set!
+        g.swap
+        g.pop
+
+        done.set!
+      end
+
+      def kind_of_array(g, label)
+        g.dup
+        g.push_cpath_top
+        g.find_const :Array
+        g.swap
+        g.kind_of
+        g.git label
       end
 
       def to_sexp
@@ -37,12 +113,75 @@ module Rubinius::ToolSets.current::ToolSet
         if @array
           @array.bytecode(g)
           @rest.bytecode(g)
-          g.cast_array
+          convert_to_ary(g)
           g.send :+, 1
         else
           @rest.bytecode(g)
           g.cast_array
         end
+      end
+
+      # TODO: de-dup
+      def convert_to_ary(g)
+        done = g.new_label
+        coerce = g.new_label
+        make_array = g.new_label
+        coerce_method = :to_ary
+
+        kind_of_array(g, done)
+
+        g.dup
+        g.push_literal :to_ary
+        g.send :respond_to?, 1, true
+        g.git coerce
+
+        discard = g.new_label
+        check_array = g.new_label
+
+        make_array.set!
+        g.dup
+        g.send :to_a, 0, true
+        coerce_method = :to_a
+        g.goto check_array
+
+        coerce.set!
+        g.dup
+        g.send :to_ary, 0, true
+
+        g.dup
+        g.push :nil
+        g.send :equal?, 1, true
+        coerce_method = :to_ary
+        g.gif check_array
+
+        g.pop
+        g.goto make_array
+
+        check_array.set!
+        kind_of_array(g, discard)
+
+        g.push_type
+        g.move_down 2
+        g.push_literal :to_ary
+        g.push_cpath_top
+        g.find_const :Array
+        g.send :coerce_to_type_error, 4, true
+        g.goto done
+
+        discard.set!
+        g.swap
+        g.pop
+
+        done.set!
+      end
+
+      def kind_of_array(g, label)
+        g.dup
+        g.push_cpath_top
+        g.find_const :Array
+        g.swap
+        g.kind_of
+        g.git label
       end
 
       # Dive down and try to find an array of regular values
@@ -142,8 +281,49 @@ module Rubinius::ToolSets.current::ToolSet
       def bytecode(g)
         pos(g)
 
+        done = g.new_label
+        coerce = g.new_label
+
         @value.bytecode(g)
-        g.cast_multi_value
+        kind_of_array(g, done)
+
+        g.dup
+        g.push_literal :to_ary
+        g.send :respond_to?, 1, true
+        g.git coerce
+
+        g.make_array 1
+        g.goto done
+
+        coerce.set!
+        g.dup
+        g.send :to_ary, 0, true
+
+        discard = g.new_label
+        kind_of_array(g, discard)
+
+        g.push_type
+        g.move_down 2
+        g.push_literal :to_a
+        g.push_cpath_top
+        g.find_const :Array
+        g.send :coerce_to_type_error, 4, true
+        g.goto done
+
+        discard.set!
+        g.swap
+        g.pop
+
+        done.set!
+      end
+
+      def kind_of_array(g, label)
+        g.dup
+        g.push_cpath_top
+        g.find_const :Array
+        g.swap
+        g.kind_of
+        g.git label
       end
 
       def to_sexp

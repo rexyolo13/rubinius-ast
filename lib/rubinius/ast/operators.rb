@@ -102,7 +102,7 @@ module CodeTools
       end
     end
 
-    class OpAssign1 < Node
+    class OpAssignElement < Node
       attr_accessor :receiver, :op, :arguments, :value
 
       def initialize(line, receiver, arguments, op, value)
@@ -233,7 +233,7 @@ module CodeTools
       end
     end
 
-    class OpAssign2 < Node
+    class OpAssignAttribute < Node
       attr_accessor :receiver, :name, :assign, :op, :value
 
       def initialize(line, receiver, name, op, value)
@@ -356,25 +356,15 @@ module CodeTools
       def bytecode(g)
         pos(g)
 
+        g.state.push_op_asgn
         @left.or_bytecode(g) do
+          g.state.pop_op_asgn
           @right.bytecode(g)
         end
       end
 
       def sexp_name
         :op_asgn_or
-      end
-    end
-
-    class OpAssignOr19 < OpAssignOr
-      def bytecode(g)
-        pos(g)
-
-        g.state.push_op_asgn
-        @left.or_bytecode(g) do
-          g.state.pop_op_asgn
-          @right.bytecode(g)
-        end
       end
     end
   end

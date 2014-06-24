@@ -152,7 +152,15 @@ module CodeTools
       end
 
       def arguments_sexp(name=:arglist)
-        sexp = [name] + @arguments.to_sexp
+        sexp = [name]
+
+        case @arguments
+        when PushArguments
+          sexp << @arguments.to_sexp
+        else
+          sexp += @arguments.to_sexp
+        end
+
         sexp << @block.to_sexp if @block
         sexp
       end
@@ -867,6 +875,26 @@ module CodeTools
         g.state.push_masgn
         @assignments.bytecode(g)
         g.state.pop_masgn
+      end
+
+      def to_sexp
+        sexp = [:args]
+
+        case @assignments
+        when ArrayLiteral
+          @assignments.each do |a|
+            case a
+            when Symbol
+              sexp << a
+            when Node
+              sexp << a.to_sexp
+            end
+          end
+        else
+          sexp << @assignments.to_sexp
+        end
+
+        sexp
       end
     end
 

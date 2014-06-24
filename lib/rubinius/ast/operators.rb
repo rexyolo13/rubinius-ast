@@ -257,7 +257,15 @@ module CodeTools
       end
 
       def to_sexp
-        arguments = [:arglist] + @arguments.to_sexp
+        arguments = [:arglist]
+
+        case @arguments
+        when PushArguments
+          arguments << @arguments.to_sexp
+        else
+          arguments += @arguments.to_sexp
+        end
+
         case @op
         when :or
           op = :"||"

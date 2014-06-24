@@ -589,7 +589,7 @@ module CodeTools
           @names = array.map { |a| a.name }
 
           array.each do |arg|
-            if arg.value.value == :*
+            if arg.value.kind_of?(SymbolLiteral) and arg.value.value == :*
               @required << arg
             else
               @defaults << arg

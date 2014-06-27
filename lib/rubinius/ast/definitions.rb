@@ -561,8 +561,12 @@ module CodeTools
         @arguments.each do |arg|
           done = g.new_label
 
-          g.passed_arg arg.variable.slot
-          g.git done
+          g.push_undef
+          arg.variable.get_bytecode(g)
+          g.send :equal?, 1, 0
+          g.gif done
+          # g.passed_arg arg.variable.slot
+          # g.git done
           arg.bytecode(g)
           g.pop
 

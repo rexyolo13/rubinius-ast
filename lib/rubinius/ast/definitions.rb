@@ -565,8 +565,6 @@ module CodeTools
           arg.variable.get_bytecode(g)
           g.send :equal?, 1, 0
           g.gif done
-          # g.passed_arg arg.variable.slot
-          # g.git done
           arg.bytecode(g)
           g.pop
 
@@ -645,9 +643,7 @@ module CodeTools
         @value.bytecode(g)
 
         g.dup
-        g.push :nil
-        g.swap
-        g.send :equal?, 1, true
+        g.is_nil
         g.gif check_hash
 
         g.pop

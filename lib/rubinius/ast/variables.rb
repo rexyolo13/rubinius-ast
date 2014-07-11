@@ -713,8 +713,10 @@ module CodeTools
         done = g.new_label
         coerce = g.new_label
         make_array = g.new_label
+        dup_as_array = g.new_label
 
-        kind_of_array(g, done)
+        instance_of_array(g, done)
+        kind_of_array(g, dup_as_array)
 
         g.dup
         g.push_literal :to_ary
@@ -726,16 +728,24 @@ module CodeTools
         g.make_array 1
         g.goto done
 
+        discard = g.new_label
+
+        dup_as_array.set!
+        g.dup
+        g.push_rubinius
+        g.find_const :Runtime
+        g.swap
+        g.send :dup_as_array, 1, true
+        g.goto discard
+
         coerce.set!
         g.dup
         g.send :to_ary, 0, true
 
-        discard = g.new_label
         check_array = g.new_label
 
         g.dup
-        g.push :nil
-        g.send :equal?, 1, true
+        g.is_nil
         g.gif check_array
 
         g.pop
@@ -757,6 +767,15 @@ module CodeTools
         g.pop
 
         done.set!
+      end
+
+      def instance_of_array(g, label)
+        g.dup
+        g.push_cpath_top
+        g.find_const :Array
+        g.swap
+        g.instance_of
+        g.git label
       end
 
       def kind_of_array(g, label)

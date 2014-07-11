@@ -14,12 +14,11 @@ module CodeTools
         done = g.new_label
         coerce = g.new_label
         make_array = g.new_label
-        array_dup = g.new_label
         dup_as_array = g.new_label
 
         @value.bytecode(g)
 
-        instance_of_array(g, array_dup)
+        instance_of_array(g, dup_as_array)
         kind_of_array(g, dup_as_array)
 
         g.dup
@@ -64,10 +63,6 @@ module CodeTools
         g.push_cpath_top
         g.find_const :Array
         g.send :coerce_to_type_error, 4, true
-        g.goto done
-
-        array_dup.set!
-        g.send :dup, 0, true
         g.goto done
 
         discard.set!

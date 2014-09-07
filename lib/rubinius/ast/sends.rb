@@ -423,7 +423,7 @@ module CodeTools
       end
 
       def to_sexp
-        [:collect_splat] + @parts.map { |x| x.to_sexp }
+        [:collect_splat] + @array.map { |x| x.to_sexp }
       end
     end
 

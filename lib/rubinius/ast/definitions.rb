@@ -561,10 +561,8 @@ module CodeTools
         @arguments.each do |arg|
           done = g.new_label
 
-          g.push_undef
           arg.variable.get_bytecode(g)
-          g.send :equal?, 1, 0
-          g.gif done
+          g.ginu done
           arg.bytecode(g)
           g.pop
 
@@ -710,9 +708,7 @@ module CodeTools
           g.dup
           g.send :size, 0, true
           g.push @arguments.size
-          g.swap
-          g.send :equal?, 1, true
-          g.gif extra_keys
+          g.gine extra_keys
 
           if @kwrest.kind_of? LocalVariableAssignment
             g.push_cpath_top

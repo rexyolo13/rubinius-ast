@@ -330,7 +330,15 @@ module Rubinius::ToolSets.current::ToolSet
         @required.size
       end
 
-      alias_method :arity, :required_args
+      def arity
+        arity = required_args
+
+        if @splat or not @optional.empty?
+          arity = -(arity + 1)
+        end
+
+        arity
+      end
 
       def post_args
         0

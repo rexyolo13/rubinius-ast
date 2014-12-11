@@ -64,6 +64,7 @@ module Rubinius::ToolSets.current::ToolSet
         blk.total_args = arguments.total_args
         blk.splat_index = arguments.splat_index
         blk.block_index = arguments.block_index
+        blk.arity = arguments.arity
 
         blk
       end
@@ -79,6 +80,7 @@ module Rubinius::ToolSets.current::ToolSet
           meth.total_args = arguments.total_args
           meth.splat_index = arguments.splat_index
           meth.block_index = arguments.block_index
+          meth.arity = arguments.arity
         end
 
         meth

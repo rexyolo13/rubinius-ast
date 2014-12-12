@@ -1,6 +1,6 @@
 # -*- encoding: us-ascii -*-
 
-module Rubinius::ToolSets.current::ToolSet
+module CodeTools
   module AST
     class Node
       attr_accessor :line

@@ -1,6 +1,6 @@
 # -*- encoding: us-ascii -*-
 
-module Rubinius::ToolSets.current::ToolSet
+module CodeTools
   module AST
     class Begin < Node
       attr_accessor :rescue

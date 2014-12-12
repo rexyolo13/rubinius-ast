@@ -1,6 +1,6 @@
 # -*- encoding: us-ascii -*-
 
-module Rubinius::ToolSets.current::ToolSet
+module CodeTools
   module AST
     class Send < Node
       attr_accessor :receiver, :name, :privately, :block, :variable, :vcall_style

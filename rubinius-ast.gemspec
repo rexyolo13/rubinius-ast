@@ -1,10 +1,9 @@
 # coding: utf-8
-require 'rubinius/toolset'
 require './lib/rubinius/ast/version'
 
 Gem::Specification.new do |spec|
   spec.name          = "rubinius-ast"
-  spec.version       = Rubinius::ToolSets.current::ToolSet::AST::VERSION
+  spec.version       = CodeTools::AST::VERSION
   spec.authors       = ["Brian Shirai"]
   spec.email         = ["brixen@gmail.com"]
   spec.description   = %q{An Abstract Syntax Tree for Ruby.}

@@ -204,7 +204,8 @@ module CodeTools
         pos(g)
 
         if g.state.op_asgn?
-          g.push_literal Compiler::Runtime
+          g.push_rubinius
+          g.find_const :Runtime
           g.push_literal @name
           g.push_scope
           g.send :find_constant_for_op_asign_or, 2

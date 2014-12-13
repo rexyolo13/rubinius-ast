@@ -264,7 +264,8 @@ module CodeTools
         g.push_state ClosedScope.new(@line)
         g.state.push_name :BEGIN
 
-        g.push_literal Compiler::Runtime
+        g.push_rubinius
+        g.find_const :Runtime
         @block.bytecode(g)
         g.send_with_block :pre_exe, 0, false
 
@@ -836,7 +837,8 @@ module CodeTools
 
       def bytecode(g)
         if @splat
-          g.push_literal Compiler::Runtime
+          g.push_rubinius
+          g.find_const :Runtime
           g.push_local 0
           g.send :unwrap_block_arg, 1
         else

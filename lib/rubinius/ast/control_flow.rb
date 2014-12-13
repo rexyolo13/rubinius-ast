@@ -209,7 +209,8 @@ module CodeTools
         g.dup
         @condition.bytecode(g)
         g.cast_array
-        g.push_literal Compiler::Runtime
+        g.push_rubinius
+        g.find_const :Runtime
         g.rotate(3)
         g.send :matches_when, 2
         g.git body
@@ -271,14 +272,16 @@ module CodeTools
       end
 
       def get_flip_flop(g, index)
-        g.push_literal Compiler::Runtime
+        g.push_rubinius
+        g.find_const :Runtime
         g.push_scope
         g.push_literal index
         g.send(:get_flip_flop, 2)
       end
 
       def set_flip_flop(g, index, value)
-        g.push_literal Compiler::Runtime
+        g.push_rubinius
+        g.find_const :Runtime
         g.push_scope
         g.push_literal index
         g.push_literal value

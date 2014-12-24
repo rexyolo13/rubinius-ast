@@ -635,43 +635,18 @@ module CodeTools
 
       def bytecode(g)
         done = g.new_label
-        check_hash = g.new_label
         assignments = g.new_label
+        missing_value = g.new_label
 
         @value.bytecode(g)
 
         g.dup
-        g.is_nil
-        g.gif check_hash
+        g.goto_if_not_nil assignments
 
         g.pop
         g.push_cpath_top
         g.find_const :Hash
         g.send :allocate, 0, true
-        g.goto assignments
-
-        check_hash.set!
-        kind_of_hash(g, assignments)
-
-        discard = g.new_label
-
-        g.dup
-        g.send :to_hash, 0, true
-        kind_of_hash(g, discard)
-
-        g.push_type
-        g.move_down 2
-        g.push_literal :to_hash
-        g.push_cpath_top
-        g.find_const :Hash
-        g.send :coerce_to_type_error, 4, true
-        g.goto done
-
-        discard.set!
-        g.swap
-        g.pop
-
-        missing_value = g.new_label
 
         assignments.set!
 
@@ -764,15 +739,6 @@ module CodeTools
         g.pop
 
         done.set!
-      end
-
-      def kind_of_hash(g, label)
-        g.dup
-        g.push_cpath_top
-        g.find_const :Hash
-        g.swap
-        g.kind_of
-        g.git label
       end
 
       def to_sexp
